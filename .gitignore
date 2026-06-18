@@ -18,3 +18,8 @@ data/uploads/
 # OS
 .DS_Store
 Thumbs.db
+
+# Real client data — never commit
+app/data/*.xlsx
+app/data/*.xls
+app/data/*.csv
