@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sales Pace Analyzer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #16213e;
+      color: white;
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header h1 { font-size: 1.4rem; font-weight: 600; }
+    header span { font-size: 0.85rem; opacity: 0.6; }
+
+    .container {
+      max-width: 960px;
+      margin: 32px auto;
+      padding: 0 20px;
+    }
+
+    /* Upload card */
+    .upload-card {
+      background: white;
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      border: 2px dashed #c8d0e0;
+      cursor: pointer;
+      transition: border-color 0.2s;
+      margin-bottom: 24px;
+    }
+
+    .upload-card:hover { border-color: #0f3460; }
+    .upload-card h2 { font-size: 1.1rem; color: #0f3460; margin-bottom: 8px; }
+    .upload-card p  { font-size: 0.85rem; color: #888; margin-bottom: 20px; }
+
+    #fileInput { display: none; }
+
+    .btn {
+      background: #0f3460;
+      color: white;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn:hover { background: #16213e; }
+    .btn:disabled { background: #aaa; cursor: not-allowed; }
+
+    /* Status */
+    #status {
+      text-align: center;
+      font-size: 0.9rem;
+      color: #555;
+      margin-bottom: 20px;
+      min-height: 24px;
+    }
+
+    /* Section cards */
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+
+    .card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #0f3460;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #f0f2f5;
+    }
+
+    /* Overall summary */
+    .summary-text {
+      font-size: 0.95rem;
+      line-height: 1.7;
+      color: #333;
+    }
+
+    /* Status badge */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-behind  { background: #ffe0e0; color: #c0392b; }
+    .badge-ahead   { background: #d4edda; color: #1e7e34; }
+    .badge-on_pace { background: #fff3cd; color: #856404; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    th {
+      text-align: left;
+      padding: 10px 12px;
+      background: #f7f9fc;
+      color: #555;
+      font-weight: 600;
+      border-bottom: 2px solid #e8ecf0;
+    }
+
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #f0f2f5;
+      vertical-align: middle;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafbff; }
+
+    /* Focus list */
+    .focus-item {
+      padding: 14px 16px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border-left: 4px solid #c0392b;
+      background: #fff8f8;
+    }
+
+    .focus-item.medium {
+      border-left-color: #e67e22;
+      background: #fffaf5;
+    }
+
+    .focus-item .headline {
+      font-weight: 600;
+      font-size: 0.92rem;
+      margin-bottom: 4px;
+    }
+
+    .focus-item .action {
+      font-size: 0.84rem;
+      color: #666;
+    }
+
+    /* PSR messages */
+    .psr-block {
+      background: #f7f9fc;
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin-bottom: 14px;
+    }
+
+    .psr-block .psr-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .psr-block .psr-name {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .psr-block .psr-route {
+      font-size: 0.8rem;
+      color: #888;
+    }
+
+    .message-box {
+      background: white;
+      border: 1px solid #e0e4ea;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-size: 0.88rem;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      color: #333;
+    }
+
+    .copy-btn {
+      margin-top: 10px;
+      background: #eef1f7;
+      color: #0f3460;
+      border: none;
+      padding: 7px 16px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+
+    .copy-btn:hover { background: #dde3f0; }
+
+    /* Zero-sale */
+    .zero-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #f0f2f5;
+      font-size: 0.88rem;
+    }
+
+    .zero-item:last-child { border-bottom: none; }
+    .zero-item .flavour { font-weight: 500; }
+    .zero-item .target  { color: #c0392b; font-weight: 600; }
+
+    /* Hidden by default */
+    #results { display: none; }
+
+    /* Progress bar */
+    .bar-wrap {
+      background: #e8ecf0;
+      border-radius: 4px;
+      height: 8px;
+      width: 120px;
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 8px;
+    }
+
+    .bar-fill {
+      height: 8px;
+      border-radius: 4px;
+      background: #0f3460;
+      transition: width 0.4s;
+    }
+
+    .bar-fill.behind { background: #c0392b; }
+    .bar-fill.ahead  { background: #27ae60; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📊 Sales Pace Analyzer</h1>
+    <span>Upload your Sales vs Target report to get instant insights</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Upload -->
+  <div class="upload-card" onclick="document.getElementById('fileInput').click()">
+    <h2>Drop your Excel report here</h2>
+    <p>Supports .xlsx files exported from the sales portal</p>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" />
+    <button class="btn" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+      Choose File
+    </button>
+  </div>
+
+  <div id="status"></div>
+
+  <!-- Results (hidden until analysis runs) -->
+  <div id="results">
+
+    <!-- Overall summary -->
+    <div class="card">
+      <h3>📋 Overall Summary</h3>
+      <p class="summary-text" id="overallSummary"></p>
+    </div>
+
+    <!-- Focus list -->
+    <div class="card">
+      <h3>🎯 Priority Focus List</h3>
+      <div id="focusList"></div>
+    </div>
+
+    <!-- PSR Messages -->
+    <div class="card">
+      <h3>💬 PSR Messages (Ready to Forward)</h3>
+      <div id="psrMessages"></div>
+    </div>
+
+    <!-- Segment breakdown -->
+    <div class="card">
+      <h3>📦 Performance by Segment</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Segment</th>
+            <th>Sale</th>
+            <th>Target</th>
+            <th>Achievement</th>
+            <th>Gap</th>
+            <th>Required/Day</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="segmentTable"></tbody>
+      </table>
+    </div>
+
+    <!-- Route breakdown -->
+    <div class="card">
+      <h3>🛣️ Performance by Route</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Route</th>
+            <th>Sale</th>
+            <th>Target</th>
+            <th>Achievement</th>
+            <th>Gap</th>
+            <th>Required/Day</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="routeTable"></tbody>
+      </table>
+    </div>
+
+    <!-- MDE breakdown -->
+    <div class="card">
+      <h3>👤 Performance by MDE</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>MDE</th>
+            <th>Sale</th>
+            <th>Target</th>
+            <th>Achievement</th>
+            <th>Gap</th>
+            <th>Required/Day</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="mdeTable"></tbody>
+      </table>
+    </div>
+
+    <!-- Zero sale -->
+    <div class="card">
+      <h3>🚨 Zero Sales — Target Exists</h3>
+      <div id="zeroSale"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const fileInput = document.getElementById('fileInput');
+  const status    = document.getElementById('status');
+  const results   = document.getElementById('results');
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    uploadAndAnalyze(file);
+  });
+
+  function fmt(n) {
+    return Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  }
+
+  function badgeHtml(status) {
+    const labels = { behind: 'Behind', ahead: 'Ahead', on_pace: 'On Pace', no_target: 'No Target' };
+    return `<span class="badge badge-${status}">${labels[status] || status}</span>`;
+  }
+
+  function barHtml(pct, status) {
+    const capped = Math.min(pct, 100);
+    return `
+      <span>${pct}%</span>
+      <span class="bar-wrap">
+        <span class="bar-fill ${status}" style="width:${capped}%"></span>
+      </span>`;
+  }
+
+  function buildTable(tbodyId, rows) {
+    const tbody = document.getElementById(tbodyId);
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${r.name}</strong></td>
+        <td>${fmt(r.sale)}</td>
+        <td>${fmt(r.target)}</td>
+        <td>${barHtml(r.pct_achieved, r.status)}</td>
+        <td>${fmt(r.gap)}</td>
+        <td>${fmt(r.required_per_day)}</td>
+        <td>${badgeHtml(r.status)}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function uploadAndAnalyze(file) {
+    status.textContent = '⏳ Uploading and analyzing... please wait.';
+    results.style.display = 'none';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/analyze', { method: 'POST', body: formData });
+
+      if (!res.ok) {
+        const err = await res.json();
+        status.textContent = `❌ Error: ${err.detail}`;
+        return;
+      }
+
+      const data = await res.json();
+      status.textContent = '✅ Analysis complete.';
+      renderResults(data);
+
+    } catch (e) {
+      status.textContent = `❌ Network error: ${e.message}`;
+    }
+  }
+
+  function renderResults(data) {
+    // Overall summary
+    document.getElementById('overallSummary').textContent =
+      data.summary.overall_summary;
+
+    // Focus list
+    const fl = document.getElementById('focusList');
+    fl.innerHTML = '';
+    data.summary.focus_list.forEach(item => {
+      const div = document.createElement('div');
+      div.className = `focus-item ${item.priority}`;
+      div.innerHTML = `
+        <div class="headline">${item.headline}</div>
+        <div class="action">→ ${item.action}</div>`;
+      fl.appendChild(div);
+    });
+
+    // PSR messages
+    const pm = document.getElementById('psrMessages');
+    pm.innerHTML = '';
+    data.summary.psr_messages.forEach(msg => {
+      const div = document.createElement('div');
+      div.className = 'psr-block';
+      div.innerHTML = `
+        <div class="psr-header">
+          <div>
+            <div class="psr-name">${msg.psr}</div>
+            <div class="psr-route">${msg.route}</div>
+          </div>
+          ${msg.status ? badgeHtml(msg.status) : ''}
+        </div>
+        <div class="message-box" id="msg-${msg.psr}">${msg.message}</div>
+        <button class="copy-btn" onclick="copyMsg('${msg.psr}')">
+          📋 Copy Message
+        </button>`;
+      pm.appendChild(div);
+    });
+
+    // Tables
+    buildTable('segmentTable', data.by_segment);
+    buildTable('routeTable',   data.by_route);
+    buildTable('mdeTable',     data.by_mde);
+
+    // Zero sale
+    const zs = document.getElementById('zeroSale');
+    zs.innerHTML = '';
+    data.zero_sale_with_target.forEach(f => {
+      const div = document.createElement('div');
+      div.className = 'zero-item';
+      div.innerHTML = `
+        <span class="flavour">${f.flavour}</span>
+        <span class="target">Target: ${fmt(f.target)} — 0 sold</span>`;
+      zs.appendChild(div);
+    });
+
+    results.style.display = 'block';
+  }
+
+  function copyMsg(psrName) {
+    const box = document.getElementById(`msg-${psrName}`);
+    navigator.clipboard.writeText(box.textContent)
+      .then(() => alert(`✅ ${psrName}'s message copied to clipboard!`))
+      .catch(() => alert('Copy failed — please select and copy manually.'));
+  }
+</script>
+
+</body>
+</html>
