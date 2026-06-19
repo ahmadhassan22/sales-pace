@@ -249,6 +249,41 @@
 
     .bar-fill.behind { background: #c0392b; }
     .bar-fill.ahead  { background: #27ae60; }
+
+    /* Expandable route rows */
+    .route-row { cursor: pointer; }
+    .route-row td:first-child::before {
+      content: "▸";
+      display: inline-block;
+      margin-right: 8px;
+      color: #0f3460;
+      transition: transform 0.2s;
+      font-size: 0.8rem;
+    }
+    .route-row.open td:first-child::before { transform: rotate(90deg); }
+
+    .segment-detail-row td {
+      padding: 0;
+      background: #fbfcfe;
+    }
+    .segment-detail-inner {
+      padding: 8px 12px 14px 36px;
+    }
+    .segment-detail-inner table { font-size: 0.82rem; }
+    .segment-detail-inner th {
+      background: #eef2f8;
+      font-size: 0.72rem;
+      padding: 7px 10px;
+    }
+    .segment-detail-inner td { padding: 7px 10px; }
+    .segment-detail-title {
+      font-size: 0.78rem;
+      color: #888;
+      margin-bottom: 8px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
   </style>
 </head>
 <body>
@@ -316,7 +351,7 @@
 
     <!-- Route breakdown -->
     <div class="card">
-      <h3>🛣️ Performance by Route</h3>
+      <h3>🛣️ Performance by Route <span style="font-size:0.78rem;color:#888;font-weight:400;">(click a route to see segment breakdown)</span></h3>
       <table>
         <thead>
           <tr>
@@ -407,6 +442,76 @@
     });
   }
 
+  // Route table with expandable per-segment breakdown.
+  function buildRouteTable(routes) {
+    const tbody = document.getElementById('routeTable');
+    tbody.innerHTML = '';
+
+    routes.forEach((r, idx) => {
+      // Main clickable route row.
+      const tr = document.createElement('tr');
+      tr.className = 'route-row';
+      tr.innerHTML = `
+        <td><strong>${r.name}</strong></td>
+        <td>${fmt(r.sale)}</td>
+        <td>${fmt(r.target)}</td>
+        <td>${barHtml(r.pct_achieved, r.status)}</td>
+        <td>${fmt(r.gap)}</td>
+        <td>${fmt(r.required_per_day)}</td>
+        <td>${badgeHtml(r.status)}</td>`;
+
+      // Hidden detail row with the segment sub-table.
+      const detailTr = document.createElement('tr');
+      detailTr.className = 'segment-detail-row';
+      detailTr.style.display = 'none';
+
+      let segRows = '';
+      r.segments.forEach(s => {
+        segRows += `
+          <tr>
+            <td><strong>${s.name}</strong></td>
+            <td>${fmt(s.sale)}</td>
+            <td>${fmt(s.target)}</td>
+            <td>${barHtml(s.pct_achieved, s.status)}</td>
+            <td>${fmt(s.gap)}</td>
+            <td>${fmt(s.required_per_day)}</td>
+            <td>${badgeHtml(s.status)}</td>
+          </tr>`;
+      });
+
+      detailTr.innerHTML = `
+        <td colspan="7">
+          <div class="segment-detail-inner">
+            <div class="segment-detail-title">${r.name} — Segment Breakdown</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Segment</th>
+                  <th>Sale</th>
+                  <th>Target</th>
+                  <th>Achievement</th>
+                  <th>Gap</th>
+                  <th>Required/Day</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>${segRows}</tbody>
+            </table>
+          </div>
+        </td>`;
+
+      // Toggle on click.
+      tr.addEventListener('click', () => {
+        const isOpen = detailTr.style.display !== 'none';
+        detailTr.style.display = isOpen ? 'none' : 'table-row';
+        tr.classList.toggle('open', !isOpen);
+      });
+
+      tbody.appendChild(tr);
+      tbody.appendChild(detailTr);
+    });
+  }
+
   async function uploadAndAnalyze(file) {
     status.textContent = '⏳ Uploading and analyzing... please wait.';
     results.style.display = 'none';
@@ -472,8 +577,8 @@
 
     // Tables
     buildTable('segmentTable', data.by_segment);
-    buildTable('routeTable',   data.by_route);
-    buildTable('mdeTable',     data.by_mde);
+    buildRouteTable(data.route_segment_breakdown);
+    buildTable('mdeTable', data.by_mde);
 
     // Zero sale
     const zs = document.getElementById('zeroSale');

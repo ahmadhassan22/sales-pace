@@ -121,6 +121,42 @@ def breakdown_by(df: pd.DataFrame, column: str, days_elapsed: int, days_remainin
     return rows
 
 
+def breakdown_route_by_segment(df: pd.DataFrame, days_elapsed: int, days_remaining: int) -> list[dict]:
+    """
+    For each route, break performance down by segment.
+
+    Returns a list of routes, each containing its overall pace metrics
+    plus a per-segment breakdown. This shows, e.g., that KOHAT ROUTE A's
+    gap is mostly in CSD and Sting — far more actionable than a single
+    route-level number.
+    """
+    df = df.copy()
+    df["Route Name"] = df["Route Name"].fillna("(blank)")
+    df["Product Group"] = df["Product Group"].fillna("(blank)")
+
+    routes = []
+    for route_name, route_group in df.groupby("Route Name"):
+        route_metrics = compute_pace_metrics(route_group, days_elapsed, days_remaining)
+
+        segments = []
+        for seg_name, seg_group in route_group.groupby("Product Group"):
+            seg_metrics = compute_pace_metrics(seg_group, days_elapsed, days_remaining)
+            segments.append({"name": str(seg_name), **seg_metrics})
+
+        # Sort segments by target size (biggest opportunity first).
+        segments.sort(key=lambda s: s["target"], reverse=True)
+
+        routes.append({
+            "name": str(route_name),
+            **route_metrics,
+            "segments": segments,
+        })
+
+    # Sort routes by target size (most important routes first).
+    routes.sort(key=lambda r: r["target"], reverse=True)
+    return routes
+
+
 def find_zero_sale_with_target(df: pd.DataFrame) -> list[dict]:
     """Products that have a target but zero sales — distribution/stock red flags."""
     grouped = df.groupby("Product Flavour").agg(
@@ -151,6 +187,7 @@ def analyze_report(path: str | Path) -> dict:
         "by_segment": breakdown_by(df, "Product Group", days_elapsed, days_remaining),
         "by_flavour": breakdown_by(df, "Product Flavour", days_elapsed, days_remaining),
         "by_route": breakdown_by(df, "Route Name", days_elapsed, days_remaining),
+        "route_segment_breakdown": breakdown_route_by_segment(df, days_elapsed, days_remaining),
         "by_distributor": breakdown_by(df, "Distributor Name", days_elapsed, days_remaining),
         "by_mde": breakdown_by(df, "MDE Name", days_elapsed, days_remaining),
         "zero_sale_with_target": find_zero_sale_with_target(df),

@@ -85,6 +85,7 @@ async def analyze(file: UploadFile = File(...)):
         "overall": analysis["overall"],
         "by_segment": analysis["by_segment"],
         "by_route": analysis["by_route"],
+        "route_segment_breakdown": analysis["route_segment_breakdown"],
         "by_mde": analysis["by_mde"],
         "by_flavour": analysis["by_flavour"],
         "zero_sale_with_target": analysis["zero_sale_with_target"],
