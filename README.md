@@ -9,6 +9,7 @@ WhatsApp messages for each field sales rep (PSR) in Roman Urdu.
 ---
 
 ## The Problem
+🎥 **[Watch the 3-minute walkthrough](https://www.loom.com/share/23f545f997264f7b8f578cb242da52e1)**
 
 A sales manager at a beverage distribution company manually analyzes
 Sales vs Target Excel reports every 1–2 days.
