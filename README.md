@@ -283,6 +283,27 @@ If the source portal changes its export layout, the loader needs updating.
 
 ---
 
+## Future Work
+
+The current version focuses on the Sales vs Target report. Several
+extensions are planned based on the user's described workflow:
+
+- **PJP (Permanent Journey Plan) report analysis** — analyze field-visit
+  KPIs (call completion, strike rate, SKUs per bill) per PSR, and generate
+  coaching messages the same way Sales vs Target messages are generated now.
+- **Master Data analysis** — surface outlet-level insights: coolers per
+  outlet, outlets below a sales threshold for the month, and outlets where
+  a product hasn't sold yet this month or year.
+- **Charts and visualizations** — visual summaries (segment and route
+  performance bars, pace-over-time) alongside the existing tables.
+- **Self-serve PSR/route management** — let the manager add, remove, or
+  reassign PSRs and routes from the interface, instead of editing the code.
+- **Optional report auto-fetch** — pull the report directly rather than
+  uploading manually, subject to the company's access policy.
+
+Each of these will be prioritized based on real feedback from daily use,
+not built speculatively.
+
 ## Environment Variables
 GROQ_API_KEY=your_groq_api_key_here
 
