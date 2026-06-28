@@ -20,9 +20,10 @@ from fastapi.staticfiles import StaticFiles
 
 from app.analyzer import analyze_report
 from app.summarizer import summarize
+import tempfile
 
 # Folder where uploaded files are temporarily stored.
-UPLOAD_DIR = Path("app/data/uploads")
+UPLOAD_DIR = Path(tempfile.gettempdir()) / "sales_pace_uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Sales Pace", version="1.0")
