@@ -55,23 +55,50 @@ async def analyze(file: UploadFile = File(...)):
       4. Delete the temp file.
       5. Return combined result.
     """
-    # Validate file type.
-    if not file.filename.endswith((".xlsx", ".xls")):
+    # First gate: filename. The sales portal exports a real XLSX binary but
+    # names it .csv, so .csv must be allowed through here. This check is
+    # cheap but weak — a filename proves nothing about the contents.
+    # The real check is the magic-byte check below.
+    if not file.filename.endswith((".xlsx", ".xls", ".csv")):
         raise HTTPException(
             status_code=400,
-            detail="Only .xlsx or .xls files are accepted."
+            detail="Only .xlsx, .xls, or .csv (portal export) files are accepted."
         )
 
     # Save to a unique temp path so concurrent uploads don't collide.
-    temp_path = UPLOAD_DIR / f"{uuid.uuid4().hex}_{file.filename}"
+    #
+    # NOTE: we deliberately DISCARD the original filename's extension and
+    # always write the temp file as .xlsx. The portal exports a real XLSX
+    # binary but names it .csv, and several libraries in the chain
+    # (openpyxl.load_workbook, older pandas.read_excel) decide how to parse
+    # a file by looking at its extension, not its bytes. Normalising the
+    # extension here makes the rest of the pipeline version-independent.
+    temp_path = UPLOAD_DIR / f"{uuid.uuid4().hex}.xlsx"
 
     try:
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
+        # Second gate: contents. An .xlsx file is a ZIP archive, so its first
+        # two bytes are always "PK". A genuine text CSV is not. This catches
+        # the case where someone "converts" the portal export and corrupts it.
+        with open(temp_path, "rb") as f:
+            magic = f.read(2)
+        if magic != b"PK":
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "This is not an Excel file. Export the Sales vs Target "
+                    "report from the portal and upload it without converting it."
+                ),
+            )
+
         analysis = analyze_report(temp_path)
         summary = summarize(analysis)
 
+    except HTTPException:
+        # Our own 400 above — let it through untouched, don't relabel it a 500.
+        raise
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:

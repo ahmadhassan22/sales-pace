@@ -2,7 +2,7 @@
 
 An AI-powered sales analytics tool built for a beverage distribution manager in Pakistan.
 
-Turns a raw Excel Sales vs Target report into instant, pace-aware insights —
+Turns a raw Sales vs Target report into instant, pace-aware insights —
 with per-route segment breakdowns, gap-to-go calculations, and ready-to-forward
 WhatsApp messages for each field sales rep (PSR) in Roman Urdu.
 
@@ -12,7 +12,7 @@ WhatsApp messages for each field sales rep (PSR) in Roman Urdu.
 🎥 **[Watch the 3-minute walkthrough](https://www.loom.com/share/23f545f997264f7b8f578cb242da52e1)**
 
 A sales manager at a beverage distribution company manually analyzes
-Sales vs Target Excel reports every 1–2 days.
+Sales vs Target reports every 1–2 days.
 
 The process looked like this:
 - Download the report from the sales portal (1,000+ rows)
@@ -37,7 +37,7 @@ That question had no easy answer in the manual process.
 
 ## The Solution
 
-A web app where the manager uploads the Excel export and instantly gets:
+A web app where the manager uploads the report export and instantly gets:
 
 - **Pace-aware performance** — achievement % compared against expected
   % based on days elapsed, not just raw numbers
@@ -56,7 +56,54 @@ A web app where the manager uploads the Excel export and instantly gets:
 
 ---
 
+## Handling the Portal's Export Format
+
+**The portal lies about the file format.** This deserves its own section
+because it silently broke the tool and cost real debugging time.
+
+The sales portal exports a genuine XLSX file (a ZIP archive of XML — its
+first two bytes are `PK`) but sometimes names it `.csv`. It is not a CSV.
+It contains no comma-separated text at all. Only the filename is wrong.
+
+This caused three separate failures, in sequence:
+
+1. **Upload rejected (HTTP 400).** `main.py` gated on the filename
+   extension and refused anything not ending in `.xlsx` / `.xls`.
+2. **Parse failed (HTTP 422).** After allowing `.csv` through, the temp
+   file was still written as `..._report.csv`. Libraries downstream
+   (`openpyxl.load_workbook`, `pandas.read_excel`) decide how to parse a
+   file by looking at its extension, not its bytes — so they raised
+   `ValueError`, which surfaced as `Could not parse period from report: ''`.
+3. **File picker hid the file.** `index.html` had `accept=".xlsx,.xls"`,
+   so the `.csv` export was greyed out in the browser dialog.
+
+**Do not "convert" the file to fix this.** Running a real CSV→XLS converter
+over it treats the binary as text and corrupts it. That is what produced the
+empty-period error in the first place. Upload the export exactly as the
+portal gives it.
+
+**How the tool handles it now:**
+
+- `index.html` accepts `.xlsx`, `.xls`, and `.csv` in the file picker.
+- `main.py` allows all three filenames past the first gate.
+- `main.py` **discards the uploaded extension entirely** and always writes
+  the temp file as `.xlsx`, so no library downstream can be misled by a
+  filename. This makes the pipeline independent of pandas/openpyxl versions.
+- `main.py` then checks the **magic bytes**. A real XLSX starts with `PK`.
+  Anything else is rejected with a clear 400 telling the manager not to
+  convert the file — rather than a confusing 422 from deep inside pandas.
+
+Filename checks are advisory. The magic-byte check is the real one.
+
+---
+
 ## Key Design Decisions
+
+**Why validate by magic bytes instead of file extension?**
+The one thing the portal gets wrong is the filename. Trusting it was the
+root cause of every parsing failure above. Bytes don't lie: an XLSX is a
+ZIP archive and always begins with `PK`. The extension is checked only to
+give a fast, friendly rejection; the byte check is what actually decides.
 
 **Why rules-based analysis + LLM only for messages?**
 All numbers (targets, gaps, run-rates, percentages, per-segment gaps)
@@ -83,8 +130,9 @@ so any date or month works automatically.
 
 **Why delete uploaded files immediately?**
 The reports contain real company sales data. Files are deleted from the
-server the moment analysis completes — even if analysis fails. Client
-data never sits on disk longer than the processing time.
+server the moment analysis completes — even if analysis fails, and even if
+the magic-byte check rejects the upload. Client data never sits on disk
+longer than the processing time.
 
 **Why Roman Urdu for PSR messages?**
 Field reps communicate in Roman Urdu on WhatsApp. English messages feel
@@ -93,9 +141,36 @@ manager directly — which means they actually get read and acted on.
 
 ---
 
+## Known Issues
+
+**`days_elapsed` is derived from the selected period, not the report date.**
+`extract_period()` reads the `Period : DD/MM/YYYY - DD/MM/YYYY` line and
+computes `days_elapsed` as the length of that range. This is correct only
+when the manager selects a range ending *today*.
+
+If he selects the full month (`01/07/2026 - 30/07/2026`) but pulls the
+report on the 8th, the tool believes 30 of 31 days have elapsed and sets
+`expected_pct` to 96.8% instead of ~26%. Every pace verdict, every status
+badge, and every PSR message is then wrong.
+
+The report already carries the answer on row 3: `Generated On : DD/MM/YYYY`.
+`days_elapsed` should be derived from that date, clamped to the period
+range, rather than from `period_end`. **Not yet fixed** — this is the next
+thing to do, and it undermines the tool's core selling point until it is.
+
+**Reports with no targets loaded render as "No Target" everywhere.**
+If the portal has not yet loaded monthly targets, `Target Conv` sums to
+zero across all rows. The tool reports this faithfully — every table shows
+`no_target` and every PSR gets the "koi target set nahi hai" message. This
+is correct behaviour, not a bug, but it is easy to mistake for one.
+
+---
+
 ## Features
 
-- Upload any Sales vs Target Excel export — any date, any month
+- Upload any Sales vs Target export — any date, any month
+- Accepts the portal's mislabeled `.csv` export as well as `.xlsx` / `.xls`
+- Validates by magic bytes, with a clear error if the file was converted
 - Period and pace baseline auto-detected from the file itself
 - Overall summary — period, achievement vs expected, gap, run-rate
 - Priority focus list — worst routes and zero-sale segments surfaced
@@ -122,31 +197,22 @@ manager directly — which means they actually get read and acted on.
 ---
 
 ## Project Structure
+
+```
 sales-pace/
-
 ├── app/
-
 │   ├── analyzer.py        # Pace-aware analysis + per-route segment breakdown
-
 │   ├── summarizer.py      # Rules-based insights + 9-PSR message generator
-
 │   ├── static/
-
 │   │   └── index.html     # Frontend (single file, expandable route rows)
-
 │   └── data/
-
 │       └── uploads/       # Temp folder — files deleted after analysis
-
-├── main.py                # FastAPI app + /analyze endpoint
-
+├── main.py                # FastAPI app + /analyze endpoint + format validation
 ├── test_analyzer.py       # Sanity tests — run before deploying
-
 ├── requirements.txt
-
 ├── .env.example
-
 └── .gitignore
+```
 
 ---
 
@@ -192,66 +258,49 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000)
 
 ### 6. Upload a report
 
-Upload any Sales vs Target Excel export from the sales portal.
+Upload the Sales vs Target export from the sales portal **exactly as it was
+downloaded** — do not rename or convert it, even if it is named `.csv`.
 Results appear in under a minute (the 9 PSR messages are generated
 by the LLM, which takes ~30 seconds).
 
 ---
 
 ## How It Works
-Excel Upload
 
-│
-
-▼
-
+```
+Upload
+  │
+  ▼
+Format Validation
+  (extension allowed → temp file written as .xlsx → magic bytes must be "PK")
+  │
+  ▼
 Period Detection
-
-(reads date range from file → calculates days elapsed + remaining)
-
-│
-
-▼
-
+  (reads date range from file → calculates days elapsed + remaining)
+  │
+  ▼
 Pace Analysis
-
-(for each segment / route / MDE / flavour, and for each segment
-
-inside each route: sale, target, % achieved, gap, required run-rate)
-
-│
-
-▼
-
+  (for each segment / route / MDE / flavour, and for each segment
+   inside each route: sale, target, % achieved, gap, required run-rate)
+  │
+  ▼
 Summarizer
-
-(priority focus list + overall summary — rules-based, no LLM)
-
-│
-
-▼
-
+  (priority focus list + overall summary — rules-based, no LLM)
+  │
+  ▼
 PSR Message Generator
-
-(for each of 9 PSRs: pulls their route's two biggest-gap segments,
-
-passes verified numbers to Groq, gets a Roman Urdu message back)
-
-│
-
-▼
-
+  (for each of 9 PSRs: pulls their route's two biggest-gap segments,
+   passes verified numbers to Groq, gets a Roman Urdu message back)
+  │
+  ▼
 Results + 9 PSR Messages
-
-(displayed in browser, expandable route breakdowns, one-click copy)
-
-│
-
-▼
-
+  (displayed in browser, expandable route breakdowns, one-click copy)
+  │
+  ▼
 File Deleted
+  (uploaded report removed from server immediately)
+```
 
-(uploaded report removed from server immediately)
 ---
 
 ## Configuring PSRs and Routes
@@ -267,7 +316,7 @@ PSR_ROUTES = {
 ```
 
 Add, remove, or reassign a line for each PSR change. Route names must
-match exactly as they appear in the Excel file. Wholesale and vacant-spot
+match exactly as they appear in the report. Wholesale and vacant-spot
 routes are intentionally left out (they have no assigned field rep).
 
 ---
@@ -275,7 +324,8 @@ routes are intentionally left out (they have no assigned field rep).
 ## Assumptions
 
 This tool reads a specific report format. It expects:
-- The data header on row 4 of the sheet
+- An XLSX binary (magic bytes `PK`), regardless of what the file is named
+- The data header on row 4 of the sheet (0-indexed; row 5 in Excel)
 - Columns named `Sale Conv`, `Target Conv`, `Route Name`,
   `Product Group`, `MDE Name`, `Product Flavour`
 - A `Period : DD/MM/YYYY - DD/MM/YYYY` line near the top
@@ -286,9 +336,8 @@ If the source portal changes its export layout, the loader needs updating.
 
 ## Future Work
 
-The current version focuses on the Sales vs Target report. Several
-extensions are planned based on the user's described workflow:
-
+- **Fix `days_elapsed`** — derive it from the `Generated On` date rather
+  than the selected period range (see Known Issues). Highest priority.
 - **PJP (Permanent Journey Plan) report analysis** — analyze field-visit
   KPIs (call completion, strike rate, SKUs per bill) per PSR, and generate
   coaching messages the same way Sales vs Target messages are generated now.
@@ -305,8 +354,13 @@ extensions are planned based on the user's described workflow:
 Each of these will be prioritized based on real feedback from daily use,
 not built speculatively.
 
+---
+
 ## Environment Variables
+
+```
 GROQ_API_KEY=your_groq_api_key_here
+```
 
 ---
 

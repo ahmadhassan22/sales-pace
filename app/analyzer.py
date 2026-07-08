@@ -25,17 +25,30 @@ def load_report(path: str | Path) -> pd.DataFrame:
 
 def extract_period(path: str | Path) -> dict:
     """
-    Read the 'Period : DD/MM/YYYY - DD/MM/YYYY' line from row 2 of the file.
+    Read the report's header block and work out how much of the month has
+    actually elapsed. Two lines matter:
 
-    Returns days elapsed (inclusive), total days in the month of the start
-    date, and days remaining. These drive all pace calculations.
+        row 2:  Period : DD/MM/YYYY - DD/MM/YYYY
+        row 3:  Generated On : DD/MM/YYYY HH:MM:SS
+
+    The period range is what the manager *selected* in the portal. It is NOT
+    the same as how much data the file contains. If he selects the whole month
+    (01/07 - 30/07) but downloads on the 8th, the file only holds 8 days of
+    sales — there is no data for days 9-30 yet, because they haven't happened.
+
+    Trusting `period_end` in that case makes the tool believe 30 of 31 days
+    have elapsed, so it expects ~97% achievement instead of ~26%, and every
+    pace verdict comes out wrong.
+
+    So the data really runs through `min(period_end, generated_on)`, and
+    `days_elapsed` is counted from the first of the month up to that date
+    (targets are monthly, so the month start is the right anchor).
     """
     raw = pd.read_excel(path, sheet_name=0, header=None, nrows=4)
-    period_text = ""
-    for val in raw.iloc[:, 0].dropna().astype(str):
-        if "Period" in val:
-            period_text = val
-            break
+    header_lines = [str(v) for v in raw.iloc[:, 0].dropna()]
+
+    period_text = next((v for v in header_lines if "Period" in v), "")
+    generated_text = next((v for v in header_lines if "Generated On" in v), "")
 
     match = re.search(r"(\d{2}/\d{2}/\d{4})\s*-\s*(\d{2}/\d{2}/\d{4})", period_text)
     if not match:
@@ -44,25 +57,47 @@ def extract_period(path: str | Path) -> dict:
     start = datetime.strptime(match.group(1), "%d/%m/%Y")
     end = datetime.strptime(match.group(2), "%d/%m/%Y")
 
-    # Days elapsed in this period (inclusive of both ends).
-    days_elapsed = (end - start).days + 1
+    # When the report was pulled. Optional — older exports may omit it.
+    generated_on = None
+    gen_match = re.search(r"(\d{2}/\d{2}/\d{4})", generated_text)
+    if gen_match:
+        generated_on = datetime.strptime(gen_match.group(1), "%d/%m/%Y")
+
+    # The last day the file can possibly hold data for.
+    #   - Report pulled mid-period  -> generated_on caps it.
+    #   - Report pulled after the period closed (e.g. last month's report,
+    #     downloaded this month) -> period_end caps it.
+    data_through = min(end, generated_on) if generated_on else end
+    # Guard against a nonsensical header (generated before the period began).
+    data_through = max(data_through, start)
 
     # Total days in the target month (targets are monthly).
+    month_start = start.replace(day=1)
     if start.month == 12:
         next_month = start.replace(year=start.year + 1, month=1, day=1)
     else:
         next_month = start.replace(month=start.month + 1, day=1)
-    month_start = start.replace(day=1)
     total_days_in_month = (next_month - month_start).days
 
-    days_remaining = total_days_in_month - days_elapsed
+    # Days of the month covered by this data, inclusive of both ends.
+    # Anchored to the 1st because the target being measured against is monthly.
+    days_elapsed = (data_through - month_start).days + 1
+    days_elapsed = max(1, min(days_elapsed, total_days_in_month))
+
+    days_remaining = max(total_days_in_month - days_elapsed, 0)
 
     return {
         "period_start": start.strftime("%d/%m/%Y"),
         "period_end": end.strftime("%d/%m/%Y"),
+        "generated_on": generated_on.strftime("%d/%m/%Y") if generated_on else None,
+        "data_through": data_through.strftime("%d/%m/%Y"),
         "days_elapsed": days_elapsed,
         "total_days_in_month": total_days_in_month,
-        "days_remaining": max(days_remaining, 0),
+        "days_remaining": days_remaining,
+        # True when the manager selected a range that doesn't start on the 1st.
+        # Sales are then partial-month while targets stay monthly, so the
+        # achievement % will understate reality. Surface this, don't hide it.
+        "partial_month_selection": start != month_start,
     }
 
 

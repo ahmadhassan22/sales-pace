@@ -72,15 +72,25 @@ def build_overall_summary(analysis: dict) -> str:
     else:
         verdict = f"You are behind pace ({pct}% achieved vs. {expected}% expected)."
 
+    # The selected range can run past the day the report was pulled. What
+    # matters for pace is how far the *data* goes, not what was selected.
     period_line = (
-        f"Reporting period: {period['period_start']} to {period['period_end']} "
+        f"Data through {period['data_through']} "
         f"({period['days_elapsed']} of {period['total_days_in_month']} days elapsed)."
     )
     gap_line = (
         f"Remaining target: {_fmt(gap)} units over the next {days_left} days "
         f"— that's {_fmt(per_day)} units/day required to hit total target."
     )
-    return f"{period_line} {verdict} {gap_line}"
+
+    warning = ""
+    if period.get("partial_month_selection"):
+        warning = (
+            f" Note: the selected range starts on {period['period_start']}, "
+            f"not the 1st. Targets are monthly, so achievement % is understated."
+        )
+
+    return f"{period_line} {verdict} {gap_line}{warning}"
 
 
 def build_focus_list(analysis: dict, top_n: int = 5) -> list[dict]:
