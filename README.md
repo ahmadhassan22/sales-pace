@@ -336,8 +336,6 @@ If the source portal changes its export layout, the loader needs updating.
 
 ## Future Work
 
-- **Fix `days_elapsed`** — derive it from the `Generated On` date rather
-  than the selected period range (see Known Issues). Highest priority.
 - **PJP (Permanent Journey Plan) report analysis** — analyze field-visit
   KPIs (call completion, strike rate, SKUs per bill) per PSR, and generate
   coaching messages the same way Sales vs Target messages are generated now.
